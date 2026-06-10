@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-LLM 客户端 - 统一接口支持多后端（Claude API / OpenAI / Ollama）
+LLM 客户端 - 统一接口支持多后端（Claude / OpenAI / DeepSeek / Ollama）
 自动从项目根目录 .env 文件加载配置
 """
 
@@ -48,7 +48,9 @@ class LLMClient(ABC):
 # ══════════════════════════════════════════════════
 
 class ClaudeClient(LLMClient):
-    """Anthropic Claude API"""
+    """Anthropic Claude API / DeepSeek Anthropic-compatible endpoint
+    DeepSeek 兼容端点: 设置 CLAUDE_BASE_URL=https://api.deepseek.com/anthropic
+    """
 
     MODELS = ['claude-sonnet-4-6', 'claude-opus-4-7', 'claude-haiku-4-5-20251001']
 
@@ -102,7 +104,7 @@ class ClaudeClient(LLMClient):
 # ══════════════════════════════════════════════════
 
 class OpenAIClient(LLMClient):
-    """OpenAI API / Azure OpenAI / any OpenAI-compatible endpoint"""
+    """OpenAI API / Azure OpenAI / DeepSeek / any OpenAI-compatible endpoint"""
 
     def __init__(self, api_key: str = '', model: str = 'gpt-4o',
                  base_url: str = 'https://api.openai.com/v1'):
@@ -147,6 +149,22 @@ class OpenAIClient(LLMClient):
             return data['choices'][0]['message']['content']
         except Exception as e:
             raise RuntimeError(f'OpenAI API error: {e}')
+
+
+# ══════════════════════════════════════════════════
+#  DeepSeek API (OpenAI-compatible & Anthropic-compatible)
+# ══════════════════════════════════════════════════
+
+class DeepSeekClient(OpenAIClient):
+    """DeepSeek API — OpenAI-compatible 接口，优先使用 DEEPSEEK_* 环境变量"""
+
+    def __init__(self, api_key: str = '', model: str = 'deepseek-v4-pro',
+                 base_url: str = 'https://api.deepseek.com'):
+        super().__init__(
+            api_key=api_key or os.environ.get('DEEPSEEK_API_KEY', os.environ.get('OPENAI_API_KEY', '')),
+            model=model or os.environ.get('DEEPSEEK_MODEL', 'deepseek-v4-pro'),
+            base_url=base_url or os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
+        )
 
 
 # ══════════════════════════════════════════════════
@@ -199,7 +217,7 @@ class OllamaClient(LLMClient):
 # ══════════════════════════════════════════════════
 
 def create_llm_client(backend: str = 'auto', **kwargs) -> LLMClient:
-    """创建 LLM 客户端。backend: 'claude'|'openai'|'ollama'|'auto'"""
+    """创建 LLM 客户端。backend: 'claude'|'openai'|'deepseek'|'ollama'|'auto'"""
     if backend == 'claude' or (backend == 'auto' and os.environ.get('ANTHROPIC_API_KEY')):
         c = ClaudeClient(
             api_key=kwargs.get('api_key', os.environ.get('ANTHROPIC_API_KEY', '')),
@@ -222,6 +240,21 @@ def create_llm_client(backend: str = 'auto', **kwargs) -> LLMClient:
         if backend == 'openai':
             raise RuntimeError('OPENAI_API_KEY 未设置')
 
+    if backend == 'deepseek' or (backend == 'auto' and (
+            os.environ.get('DEEPSEEK_API_KEY') or
+            (os.environ.get('ANTHROPIC_API_KEY') and 'deepseek' in os.environ.get('CLAUDE_BASE_URL', '')) or
+            (os.environ.get('OPENAI_API_KEY') and 'deepseek' in os.environ.get('OPENAI_BASE_URL', '')))):
+        c = DeepSeekClient(
+            api_key=kwargs.get('api_key', os.environ.get('DEEPSEEK_API_KEY',
+                os.environ.get('OPENAI_API_KEY', os.environ.get('ANTHROPIC_API_KEY', '')))),
+            model=kwargs.get('model', os.environ.get('DEEPSEEK_MODEL', 'deepseek-v4-pro')),
+            base_url=kwargs.get('base_url', os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'))
+        )
+        if c.is_available():
+            return c
+        if backend == 'deepseek':
+            raise RuntimeError('DeepSeek API Key 未设置（DEEPSEEK_API_KEY 或 OPENAI_API_KEY）')
+
     if backend == 'ollama' or backend == 'auto':
         c = OllamaClient(
             model=kwargs.get('model', os.environ.get('OLLAMA_MODEL', 'qwen2.5:7b')),
@@ -237,6 +270,7 @@ def create_llm_client(backend: str = 'auto', **kwargs) -> LLMClient:
             '没有可用的 AI 服务。请选择以下任一方式：\n'
             '  1. 运行 setup.bat 配置向导\n'
             '  2. 创建 .env 文件设置 API Key\n'
-            '  3. 使用 --no-llm 进入离线模式'
+            '  3. 使用 --no-llm 进入离线模式\n'
+            '  支持: Claude / OpenAI / DeepSeek / Ollama'
         )
     raise ValueError(f'未知后端: {backend}')

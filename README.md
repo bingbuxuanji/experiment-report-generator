@@ -8,7 +8,7 @@
 # 1. 安装依赖
 pip install python-docx
 
-# 2. 配置 AI 服务（三选一，详见下方 LLM 配置）
+# 2. 配置 AI 服务（四选一，详见下方 LLM 配置）
 cp .env.example .env
 # 编辑 .env 填入 API Key
 
@@ -40,7 +40,26 @@ OPENAI_API_KEY=sk-...
 OPENAI_BASE_URL=https://api.openai.com/v1  # 可替换为任何兼容 endpoint
 ```
 
-### 方式三：本地 Ollama（免费）
+### 方式三：DeepSeek API
+
+```env
+# .env
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-pro
+```
+
+获取: [https://platform.deepseek.com/](https://platform.deepseek.com/)
+
+DeepSeek 同时兼容 Anthropic API 格式，也可通过 Claude 客户端接入：
+
+```env
+ANTHROPIC_API_KEY=sk-your-deepseek-key
+CLAUDE_BASE_URL=https://api.deepseek.com/anthropic
+CLAUDE_MODEL=deepseek-v4-pro
+```
+
+### 方式四：本地 Ollama（免费）
 
 ```bash
 # 安装 Ollama
@@ -66,7 +85,7 @@ python generate_reports_v3.py ... --no-llm
 ```
 generate_reports_v3.py         ← CLI 入口
 ├── template_parser.py         ← 解析任意 .docx 模板
-├── llm_client.py              ← Claude / OpenAI / Ollama 统一接口
+├── llm_client.py              ← Claude / OpenAI / DeepSeek / Ollama 统一接口
 ├── content_generator.py       ← LLM 生成报告 + Mermaid 流程图
 ├── tool_chain.py              ← docx 组装 + 图片嵌入
 ├── console_util.py            ← 控制台美化
@@ -126,7 +145,7 @@ LLM 生成的内容会自动缓存为 `llm_cache_*.txt` 文件。修改缓存后
 | `--materials` | 实验素材文件夹 | 可选 |
 | `--source` | 源码项目文件夹 | 可选 |
 | `--exp` | 批量模式（可多次指定） | 可选 |
-| `--llm` | AI 后端: claude/openai/ollama/auto | auto |
+| `--llm` | AI 后端: claude/openai/deepseek/ollama/auto | auto |
 | `--llm-model` | 指定模型名 | 自动 |
 | `--no-llm` | 离线模式 | false |
 | `--output` | 输出目录 | 当前目录 |

@@ -64,15 +64,16 @@ def check_existing():
 def choose_backend():
     print("[2/3] 选择 AI 服务：")
     print()
-    print("  [1] Claude API    - 推荐，效果最好")
+    print("  [1] Claude API    - Anthropic Claude，效果好")
     print("  [2] OpenAI API    - ChatGPT 同款")
-    print("  [3] 本地 Ollama    - 免费，无需联网")
-    print("  [4] 跳过           - 离线模式")
+    print("  [3] DeepSeek API  - 国内可用，兼容 OpenAI/Anthropic 格式")
+    print("  [4] 本地 Ollama    - 免费，无需联网")
+    print("  [5] 跳过           - 离线模式")
     print()
 
     while True:
-        choice = input("  请输入数字 (1-4): ").strip()
-        if choice in ('1', '2', '3', '4'):
+        choice = input("  请输入数字 (1-5): ").strip()
+        if choice in ('1', '2', '3', '4', '5'):
             return choice
         print("  无效选项，请重新输入")
 
@@ -110,6 +111,30 @@ def setup_openai():
     print("  [OK] OpenAI API 已配置")
 
 
+def setup_deepseek():
+    print()
+    print("  请打开 https://platform.deepseek.com/ 获取 API Key")
+    print("  格式: sk-...")
+    print()
+    key = input("  粘贴 Key: ").strip()
+    if not key:
+        print("  未输入 Key，跳过")
+        return
+    print()
+    print("  可选模型:")
+    print("    1. deepseek-v4-pro   (Pro 版，推荐)")
+    print("    2. deepseek-v4-flash (Flash 版，更快)")
+    model_choice = input("  选择模型 (默认 1): ").strip()
+    model = 'deepseek-v4-flash' if model_choice == '2' else 'deepseek-v4-pro'
+    lines = [
+        f"DEEPSEEK_API_KEY={key}",
+        f"DEEPSEEK_BASE_URL=https://api.deepseek.com",
+        f"DEEPSEEK_MODEL={model}",
+    ]
+    ENV_FILE.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    print(f"  [OK] DeepSeek API 已配置 (模型: {model})")
+
+
 def setup_ollama():
     print()
     print("  请确保 Ollama 已安装并运行")
@@ -142,8 +167,10 @@ def main():
     elif choice == '2':
         setup_openai()
     elif choice == '3':
-        setup_ollama()
+        setup_deepseek()
     elif choice == '4':
+        setup_ollama()
+    elif choice == '5':
         print("  [跳过] 将使用离线模式（功能受限）")
 
     show_done()

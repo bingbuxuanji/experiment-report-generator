@@ -232,9 +232,10 @@ def main():
               --template template.docx --materials ./素材 --llm ollama
 
         LLM 配置:
-          Claude:  export ANTHROPIC_API_KEY=sk-ant-...
-          OpenAI:  export OPENAI_API_KEY=sk-...
-          Ollama:  ollama serve (默认 http://localhost:11434)
+          Claude:   export ANTHROPIC_API_KEY=sk-ant-...
+          OpenAI:   export OPENAI_API_KEY=sk-...
+          DeepSeek: export DEEPSEEK_API_KEY=sk-...  (兼容 OpenAI/Anthropic)
+          Ollama:   ollama serve (默认 http://localhost:11434)
         """)
     )
 
@@ -259,7 +260,7 @@ def main():
 
     # LLM 参数
     parser.add_argument('--llm', default='auto',
-                        choices=['auto', 'claude', 'openai', 'ollama'],
+                        choices=['auto', 'claude', 'openai', 'deepseek', 'ollama'],
                         help='LLM 后端选择 (default: auto)')
     parser.add_argument('--llm-model', help='指定模型名（如 claude-sonnet-4-6）')
     parser.add_argument('--llm-key', help='API Key（覆盖环境变量）')
