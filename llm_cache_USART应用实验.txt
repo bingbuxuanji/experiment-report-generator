@@ -1,0 +1,132 @@
+【实验标题】
+USART的应用实验——串口发送+接收
+
+【实验目的】
+1. 掌握STM32F103C8T6通用同步/异步收发器（USART1）的硬件结构与配置方法。
+2. 掌握USART异步全双工通信原理，深入理解波特率、数据帧格式（起始位、数据位、停止位、校验位）的含义。
+3. 掌握串口数据轮询发送方法（查询TXE标志位）和中断接收方法（RXNE中断）。
+4. 理解C标准库printf函数重定向的底层原理（重写fputc函数），掌握通过串口实现格式化调试输出的方法。
+5. 实现串口数据收发回环测试（echo back），验证全双工通信的正确性和可靠性。
+
+【实验内容】
+使用NANO STM32F1开发板，配置USART1实现串口全双工异步通信。通信参数：波特率9600bps、8位数据位、1位停止位、无奇偶校验位（简记为9600-8-N-1）。
+发送方式：轮询方式。调用USART_SendData将数据写入发送数据寄存器DR，查询TXE（发送数据寄存器空）标志位等待发送完成。
+接收方式：中断方式。使能RXNE（接收数据寄存器非空）中断，当接收到数据时触发USART1_IRQHandler中断服务函数，读取DR寄存器获取接收字节。
+实验功能验证：
+（1）上电后串口自动发送初始化测试数据，包括单字节（0x41即字符'A'）、数组（0x42~0x45即"BCDE"）、字符串（"Num1="）、格式化数字（111），以及通过重定向printf和自定义Serial_Printf函数输出的格式化字符串。
+（2）在串口调试助手中发送任意字节数据，开发板接收后立即原样回传（echo back），同时在OLED屏幕上以十六进制格式显示最近收到的数据。
+
+【实验原理与方法】
+（1）USART异步串行通信原理
+USART (Universal Synchronous/Asynchronous Receiver/Transmitter) 是一种通用串行通信外设，支持同步和异步两种模式。
+· 异步模式特点：通信双方无需共享时钟线，各自使用独立时钟源，通过预先约定相同的波特率（每秒传输的码元数）实现数据同步。
+· 数据帧格式（本实验配置）：
+  [起始位 1bit 低电平] → [数据位 8bit，LSB先发] → [停止位 1bit 高电平]
+  无校验位，每帧共10bit。
+· 波特率9600的含义：每秒传输9600个码元，每个码元持续时间约104.17μs。
+
+（2）引脚功能配置
+USART1对应的GPIO引脚：
+· TX（发送）：PA9，需配置为复用推挽输出（GPIO_Mode_AF_PP），由USART外设控制输出时序。
+· RX（接收）：PA10，需配置为上拉输入（GPIO_Mode_IPU），保持空闲状态为确定的高电平。
+启动前需使能USART1时钟（RCC_APB2Periph_USART1）和GPIOA时钟。
+
+（3）数据收发机制详解
+发送流程（轮询方式）：
+  ① 调用USART_SendData(USART1, byte)将字节写入发送数据寄存器DR。
+  ② USART硬件自动添加起始位和停止位，按设定的波特率将数据逐位移出TX引脚。
+  ③ 软件调用while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET)等待发送完成。
+  ④ 下次写入DR时硬件自动清除TXE标志位。
+
+接收流程（中断方式）：
+  ① 初始化时调用USART_ITConfig(USART1, USART_IT_RXNE, ENABLE)使能接收中断。
+  ② USART硬件持续监测RX引脚，检测到起始位后按波特率采样8个数据位。
+  ③ 接收完成后硬件自动将数据存入DR并置位RXNE标志，触发USART1_IRQHandler中断。
+  ④ 在中断服务函数中调用USART_ReceiveData(USART1)读取DR（读操作自动清除RXNE标志）。
+
+（4）printf重定向原理
+C标准库的printf函数最终调用fputc(int ch, FILE *f)输出单个字符。只需重写fputc函数，将ch参数通过Serial_SendByte发送到串口，再在Keil工程选项中勾选"Use MicroLIB"（使用微库），即可使printf的输出重定向到串口。进一步使用va_list可变参数列表封装Serial_Printf函数，支持在程序的任意位置使用格式化字符串输出。
+
+（5）硬件接线图（基于NANO STM32F1 V2.0原理图）
+┌──────────────────────────────┐
+│      NANO STM32F1 开发板       │
+├──────────────────────────────┤
+│ PA9  (USART1_TX) ── 串口模块RX│  交叉连接（TX→RX）
+│ PA10 (USART1_RX) ── 串口模块TX│  交叉连接（RX→TX）
+│ GND  ──────────── 串口模块GND │  共地
+│                              │
+│ PB8  ──── OLED SCL           │  OLED显示
+│ PB9  ──── OLED SDA           │
+│ 3.3V ─── OLED VCC            │
+│ GND  ─── OLED GND            │
+└──────────────────────────────┘
+注：NANO STM32F1 V2.0开发板板载CH340G USB转串口芯片。使用板载串口时，需确保PA9-RXD和PA10-TXD的跳线帽已短接。如使用外部USB转串口模块，则需断开跳线帽，将PA9接模块RX、PA10接模块TX、共地。
+
+【主要实验设备及器材】
+① NANO STM32F1开发板（STM32F103C8T6主控芯片），1块
+② 0.96寸OLED显示屏（I²C接口，SSD1306驱动芯片，分辨率128×64），1个
+③ USB转串口模块（CH340G芯片），1个（亦可使用板载CH340G）
+④ 杜邦线（母母/公母），若干
+⑤ 个人计算机（安装Keil MDK-ARM V5开发环境、CH340驱动程序、串口调试助手软件），1台
+
+【实验步骤】
+1. 硬件连接：
+   （方案A-使用板载串口）确认NANO开发板上PA9-RXD和PA10-TXD两组跳线帽已用短路帽短接，USB线直接连接开发板USB口。
+   （方案B-使用外接模块）断开上述跳线帽，用杜邦线将PA9接USB转串口模块的RX引脚，PA10接模块的TX引脚，开发板GND接模块GND。OLED模块：PB8→SCL，PB9→SDA，3.3V→VCC，GND→GND。
+
+2. 创建工程：在Keil MDK-ARM V5中新建工程，选择STM32F103C8。添加标准外设库文件、OLED驱动（OLED.c/h）、按键驱动（Key.c/h，本实验未用但保留）以及用户编写的串口驱动（Serial.c/Serial.h）。
+
+3. 编写Serial串口驱动模块：
+   - Serial_Init()：使能USART1和GPIOA时钟；配置PA9为复用推挽输出（GPIO_Mode_AF_PP）；若需接收则配置PA10为上拉输入（GPIO_Mode_IPU）；配置USART1参数（9600bps, 8bit数据, 1bit停止, 无校验, 全双工模式）；使能RXNE接收中断；配置NVIC（USART1_IRQn, 抢占优先级=1, 响应优先级=1）；使能USART1。
+   - Serial_SendByte(uint8_t Byte)：调用USART_SendData写入DR，while等待TXE标志置位。
+   - Serial_SendArray/SendString/SendNumber：基于SendByte封装的批量发送函数。
+   - 重定向fputc：int fputc(int ch, FILE *f) { Serial_SendByte(ch); return ch; }，配合工程选项MicroLIB使用。
+   - Serial_Printf(char *format, ...)：使用va_list和vsprintf实现可变参数格式化串口输出。
+
+4. 编写中断服务函数：
+   USART1_IRQHandler()中判断USART_GetITStatus(USART1, USART_IT_RXNE) == SET，若接收到数据，调用USART_ReceiveData(USART1)读取DR寄存器内容到Serial_RxData变量，置Serial_RxFlag = 1通知主程序处理。读取DR后RXNE标志自动清除。
+
+5. 编写主程序（main.c）：
+   调用OLED_Init()和Serial_Init()完成初始化。上电后依次发送测试数据（字节0x41、数组0x42~0x45、字符串"\r\nNum1="、数字111、printf格式化字符串、Serial_Printf格式化字符串）。OLED显示"RxData:"。在while(1)循环中检测Serial_RxFlag是否为1，若是则读取Serial_RxData，调用Serial_SendByte回传，并在OLED上以十六进制格式显示收到的数据。
+
+6. 编译设置：打开工程选项（魔术棒）→ Target标签 → 勾选"Use MicroLIB"（使用微库以支持printf重定向）。Rebuild编译工程确保0错误0警告。
+
+7. 下载与测试：
+   - 通过USB线连接开发板，下载程序。
+   - 打开串口调试助手（如SSCOM、PuTTY），选择对应的COM端口号，设置波特率9600、8位数据、1位停止、无校验。
+   - 观察串口助手接收区是否显示上电初始化测试数据。
+   - 在串口助手发送区输入任意字符（如'A'、'0x55'等），点击发送，观察接收区是否收到相同的回传数据，同时观察OLED屏幕是否更新显示收到的十六进制值。
+
+【实验结果与思考】
+实验结果：
+（1）程序上电后，串口调试助手正确接收到完整的初始化测试数据（单字节、数组、字符串、数字、printf格式化输出、自定义Serial_Printf输出），验证了USART1发送功能正常。
+（2）在串口助手中发送任意字节数据（如字符'A'=0x41、数字0x55等），开发板成功接收并立即回传相同数据（echo back），OLED屏幕同步以十六进制格式显示收到的数据值，验证了USART1中断接收和数据回环功能正常。
+（3）9600bps速率下数据收发无丢失、无误码，通信稳定可靠。
+（4）printf重定向功能正常，使用printf和Serial_Printf输出的格式化字符串均能正确显示在串口助手中。
+
+实验思考：
+① 轮询发送方式在发送数据时CPU需等待TXE标志位（while循环阻塞），适合发送量较小的场景。对于大量数据传输，应采用DMA（直接存储器访问）方式，将数据从内存直接搬运到USART的DR寄存器，CPU无需介入每个字节的发送过程。
+② printf重定向是嵌入式开发中最实用的调试技巧之一。将标准C库的格式化输出函数映射到硬件串口，可以像在PC上调试C程序一样方便地输出变量值、程序状态等调试信息，大幅提升开发效率。
+③ 异步串行通信的核心前提是收发双方波特率严格一致。实际项目中，内部RC振荡器的精度（约±1%）在高低温环境下可能漂移至±2%以上，当波特率偏差超过约2%时会导致采样点偏移从而产生误码。对通信可靠性要求较高的场合，应使用外部晶振作为时钟源。
+④ 本实验基础上可扩展自定义通信协议：定义帧头+数据长度+数据+校验和的帧格式，实现可靠的数据包传输；或移植Modbus等工业标准协议，应用于实际工程项目。
+
+【流程图】
+```mermaid
+flowchart TD
+    A["开始"] --> B["OLED_Init<br/>初始化OLED显示屏"]
+    B --> C["Serial_Init<br/>使能USART1和GPIOA时钟<br/>PA9复用推挽输出<br/>USART1: 9600-8-N-1<br/>使能RXNE接收中断<br/>NVIC优先级配置"]
+    C --> D["发送初始化测试数据<br/>SendByte/SendArray<br/>SendString/SendNumber<br/>printf/Serial_Printf"]
+    D --> E["OLED显示静态字符串<br/>RxData:"]
+    E --> F{"Serial_GetRxFlag<br/>== 1 ?"}
+    F -->|"是"| G["读取Serial_RxData<br/>获取接收字节"]
+    F -->|"否"| F
+    G --> H["Serial_SendByte<br/>回传相同数据 Echo"]
+    H --> I["OLED_ShowHexNum<br/>十六进制显示接收数据"]
+    I --> F
+
+    J["USART1_IRQHandler<br/>中断服务函数<br/>收到数据自动触发"] --> K{"USART_GetITStatus<br/>RXNE?"}
+    K -->|"SET"| L["USART_ReceiveData<br/>读取DR寄存器<br/>存入Serial_RxData"]
+    L --> M["置Serial_RxFlag = 1<br/>通知主循环处理"]
+    M --> N["中断返回"]
+    K -->|"否"| N
+```
